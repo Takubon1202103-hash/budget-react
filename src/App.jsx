@@ -230,7 +230,7 @@ export default function App() {
                       <input type="number" inputMode="numeric" value={budgetDraft}
                         onChange={e => setBudgetDraft(e.target.value)}
                         style={{ ...inp, width:120, padding:'6px 10px', fontSize:14 }} placeholder="金額" />
-                      <button onClick={() => { const v=parseInt(budgetDraft); if(v>0) setBudget(v); setEditBudget(false) }}
+                      <button onClick={() => { const v=parseInt(budgetDraft); if(!isNaN(v) && v>=0) setBudget(v); setEditBudget(false) }}
                         style={{ padding:'6px 14px', background:C.income, color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:600 }}>OK</button>
                     </div>
                   ) : (
