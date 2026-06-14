@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List, Calendar, LogOut } from 'lucide-react'
 import { auth, db, googleProvider } from './firebase'
-import { signInWithPopup, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
+import { signInWithRedirect, getRedirectResult, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
 import { collection, doc, onSnapshot, addDoc, deleteDoc, setDoc } from 'firebase/firestore'
 
 const C = {
@@ -141,6 +141,7 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => setUser(prev => prev === undefined ? null : prev), 4000)
     const unsub = onAuthStateChanged(auth, u => { clearTimeout(timer); setUser(u ?? null) })
+    getRedirectResult(auth).catch(() => {})
     return () => { unsub(); clearTimeout(timer) }
   }, [])
 
@@ -158,7 +159,7 @@ export default function App() {
     })
   }, [user])
 
-  const login  = () => signInWithPopup(auth, googleProvider)
+  const login  = () => signInWithRedirect(auth, googleProvider)
   const logout = () => fbSignOut(auth)
 
   const monthTxns = useMemo(() =>
