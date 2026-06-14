@@ -107,7 +107,7 @@ export default function App() {
     <div style={{ background:C.bg, minHeight:'100vh', maxWidth:430, margin:'0 auto', paddingBottom:80 }}>
 
       {/* HEADER */}
-      <div style={{ background:C.bg, padding:'16px 16px 0', position:'sticky', top:0, zIndex:10, borderBottom:`1px solid ${C.border}` }}>
+      <div style={{ background:C.bg, padding:'16px 16px 0', paddingTop:'calc(16px + env(safe-area-inset-top))', position:'sticky', top:0, zIndex:10, borderBottom:`1px solid ${C.border}` }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
           <button style={navBtn} onClick={() => setCur(d => new Date(d.getFullYear(), d.getMonth()-1, 1))}><ChevronLeft size={16}/></button>
           <span style={{ fontFamily:'Georgia, serif', fontSize:'1.1rem', fontWeight:700, color:C.text }}>{cur.getFullYear()}年{cur.getMonth()+1}月</span>
