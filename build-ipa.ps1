@@ -2,7 +2,7 @@ $TOKEN = (Get-Content "$PSScriptRoot\.env.local" | Where-Object { $_ -match "^GI
 $OWNER = "Takubon1202103-hash"
 $REPO = "budget-react"
 $WORKFLOW = "build-ios.yml"
-$OUTPUT_DIR = [Environment]::GetFolderPath("Desktop")
+$OUTPUT_DIR = Join-Path ([Environment]::GetFolderPath("Desktop")) "App\budget"
 
 $headers = @{
     "Authorization" = "Bearer $TOKEN"
@@ -50,13 +50,16 @@ $zipPath = Join-Path $OUTPUT_DIR "budget-ipa.zip"
 Invoke-WebRequest -Uri $artifact.archive_download_url -Headers $headers -OutFile $zipPath
 
 Write-Host "Extracting..." -ForegroundColor Cyan
-Expand-Archive -Path $zipPath -DestinationPath $OUTPUT_DIR -Force
+$tmpDir = Join-Path $OUTPUT_DIR "_tmp"
+Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
 Remove-Item $zipPath
 
-$ipa = Get-ChildItem -Path $OUTPUT_DIR -Filter "*.ipa" -Recurse | Select-Object -First 1
+$ipa = Get-ChildItem -Path $tmpDir -Filter "*.ipa" -Recurse | Select-Object -First 1
 $newName = "budget-$(Get-Date -Format 'yyyyMMdd-HHmm').ipa"
-Rename-Item -Path $ipa.FullName -NewName $newName
+$dest = Join-Path $OUTPUT_DIR $newName
+Move-Item -Path $ipa.FullName -Destination $dest -Force
+Remove-Item $tmpDir -Recurse -Force
 
 Write-Host ""
 Write-Host "Done! IPA saved at:" -ForegroundColor Green
-Write-Host (Join-Path $OUTPUT_DIR $newName)
+Write-Host $dest

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List, Calendar } from 'lucide-react'
 
 const C = {
   bg: '#FBF8F3', income: '#1F6F5C', incomeBg: '#EAF4F0',
@@ -27,6 +27,80 @@ const SAMPLE = [
 
 const fmt     = n => '¥' + Math.abs(n).toLocaleString('ja-JP')
 const fmtDate = s => { const d = new Date(s); return `${d.getMonth()+1}/${d.getDate()}` }
+
+function CalendarPicker({ value, onChange, onClose }) {
+  const sel = value ? new Date(value + 'T00:00:00') : null
+  const [view, setView] = useState(() => {
+    const d = sel || new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+  const today = new Date()
+  const year  = view.getFullYear()
+  const month = view.getMonth()
+  const offset     = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const cells = [...Array(offset).fill(null), ...Array.from({length: daysInMonth}, (_, i) => i + 1)]
+
+  const isSel   = d => sel && sel.getFullYear()===year && sel.getMonth()===month && sel.getDate()===d
+  const isToday = d => today.getFullYear()===year && today.getMonth()===month && today.getDate()===d
+
+  const pick = d => {
+    if (!d) return
+    onChange(`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`)
+    onClose()
+  }
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background:C.card, borderRadius:'20px 20px 0 0', padding:'20px 16px 40px', width:'100%', maxWidth:430 }}>
+        {/* ヘッダー */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+          <button onClick={() => setView(new Date(year, month-1, 1))}
+            style={{ background:'none', border:'none', cursor:'pointer', color:C.muted, padding:8 }}>
+            <ChevronLeft size={20} />
+          </button>
+          <span style={{ fontFamily:'Georgia, serif', fontWeight:700, fontSize:'1rem', color:C.text }}>
+            {year}年{month+1}月
+          </span>
+          <button onClick={() => setView(new Date(year, month+1, 1))}
+            style={{ background:'none', border:'none', cursor:'pointer', color:C.muted, padding:8 }}>
+            <ChevronRight size={20} />
+          </button>
+        </div>
+        {/* 曜日ヘッダー */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:4 }}>
+          {['日','月','火','水','木','金','土'].map((d, i) => (
+            <div key={d} style={{ textAlign:'center', fontSize:'0.72rem', fontWeight:600,
+              color: i===0 ? C.expense : i===6 ? '#3B82F6' : C.muted, paddingBottom:6 }}>
+              {d}
+            </div>
+          ))}
+        </div>
+        {/* 日付グリッド */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'4px 0' }}>
+          {cells.map((d, i) => (
+            <button key={i} onClick={() => pick(d)} disabled={!d}
+              style={{ background: isSel(d) ? C.income : 'none',
+                color: !d ? 'transparent' : isSel(d) ? '#fff' : i%7===0 ? C.expense : i%7===6 ? '#3B82F6' : C.text,
+                border: isToday(d) && !isSel(d) ? `1.5px solid ${C.income}` : 'none',
+                borderRadius: '50%', width:38, height:38, margin:'0 auto', display:'flex',
+                alignItems:'center', justifyContent:'center', fontSize:'0.9rem',
+                fontWeight: isSel(d) || isToday(d) ? 700 : 400, cursor: d ? 'pointer' : 'default' }}>
+              {d || ''}
+            </button>
+          ))}
+        </div>
+        {/* キャンセル */}
+        <button onClick={onClose}
+          style={{ width:'100%', marginTop:16, padding:'12px', background:'#F0EBE4', border:'none',
+            borderRadius:10, color:C.muted, fontWeight:600, cursor:'pointer', fontSize:'0.95rem' }}>
+          キャンセル
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function TxnRow({ t, onDelete }) {
   const color = t.type === 'income' ? C.income : C.expense
@@ -58,6 +132,7 @@ export default function App() {
   const [tab, setTab]       = useState('dash')
   const [editBudget, setEditBudget]   = useState(false)
   const [budgetDraft, setBudgetDraft] = useState('')
+  const [showCal, setShowCal] = useState(false)
   const [form, setForm] = useState({
     type:'expense', amount:'', date:today.toISOString().split('T')[0], category:'食費', memo:'',
   })
@@ -220,16 +295,21 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {[
-              { label:'金額', key:'amount', type:'number', inputMode:'numeric', placeholder:'0' },
-              { label:'日付', key:'date',   type:'date' },
-            ].map(({ label, key, type, inputMode, placeholder }) => (
-              <div key={key} style={{ marginBottom:14 }}>
-                <label style={{ display:'block', fontSize:'0.8rem', color:C.muted, marginBottom:6, fontWeight:600 }}>{label}</label>
-                <input type={type} inputMode={inputMode} placeholder={placeholder} value={form[key]}
-                  onChange={e => setField(key, e.target.value)} style={inp} />
-              </div>
-            ))}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ display:'block', fontSize:'0.8rem', color:C.muted, marginBottom:6, fontWeight:600 }}>金額</label>
+              <input type="number" inputMode="numeric" placeholder="0" value={form.amount}
+                onChange={e => setField('amount', e.target.value)} style={inp} />
+            </div>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ display:'block', fontSize:'0.8rem', color:C.muted, marginBottom:6, fontWeight:600 }}>日付</label>
+              <button onClick={() => setShowCal(true)}
+                style={{ ...inp, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', textAlign:'left' }}>
+                <span style={{ color: form.date ? C.text : C.muted }}>
+                  {form.date ? `${new Date(form.date+'T00:00:00').getFullYear()}年${new Date(form.date+'T00:00:00').getMonth()+1}月${new Date(form.date+'T00:00:00').getDate()}日` : '日付を選択'}
+                </span>
+                <Calendar size={16} color={C.muted} />
+              </button>
+            </div>
             <div style={{ marginBottom:14 }}>
               <label style={{ display:'block', fontSize:'0.8rem', color:C.muted, marginBottom:6, fontWeight:600 }}>カテゴリ</label>
               <select value={form.category} onChange={e => setField('category', e.target.value)} style={inp}>
@@ -259,6 +339,9 @@ export default function App() {
           }
         </div>
       )}
+
+      {/* CALENDAR MODAL */}
+      {showCal && <CalendarPicker value={form.date} onChange={d => setField('date', d)} onClose={() => setShowCal(false)} />}
 
       {/* BOTTOM NAV */}
       <nav style={{ position:'fixed', bottom:0, left:'50%', transform:'translateX(-50%)', width:'100%', maxWidth:430, background:'#fff', borderTop:`1px solid ${C.border}`, display:'flex', zIndex:20, paddingBottom:'env(safe-area-inset-bottom)' }}>
