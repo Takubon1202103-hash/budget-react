@@ -1,5 +1,8 @@
-import { useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List, Calendar } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List, Calendar, LogOut } from 'lucide-react'
+import { auth, db, googleProvider } from './firebase'
+import { signInWithPopup, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
+import { collection, doc, onSnapshot, addDoc, deleteDoc, setDoc } from 'firebase/firestore'
 
 const C = {
   bg: '#FBF8F3', income: '#1F6F5C', incomeBg: '#EAF4F0',
@@ -10,20 +13,6 @@ const C = {
 
 const INCOME_CATS  = ['バイト代', '給与', 'ボーナス', '副業', 'その他']
 const EXPENSE_CATS = ['食費', '交通費', '娯楽', 'ショッピング', '光熱費', '通信費', '医療費', '日用品', 'その他']
-
-const SAMPLE = [
-  { id:1,  type:'income',  amount:85000, date:'2026-06-05', category:'バイト代',     memo:'6月前半シフト' },
-  { id:2,  type:'income',  amount:5000,  date:'2026-06-12', category:'その他',       memo:'フリマ売上' },
-  { id:3,  type:'expense', amount:4200,  date:'2026-06-06', category:'食費',         memo:'スーパー' },
-  { id:4,  type:'expense', amount:3100,  date:'2026-06-08', category:'交通費',       memo:'定期代' },
-  { id:5,  type:'expense', amount:8500,  date:'2026-06-09', category:'ショッピング', memo:'Tシャツ' },
-  { id:6,  type:'expense', amount:2800,  date:'2026-06-11', category:'食費',         memo:'外食' },
-  { id:7,  type:'expense', amount:5000,  date:'2026-06-13', category:'娯楽',         memo:'カラオケ' },
-  { id:8,  type:'expense', amount:1500,  date:'2026-06-14', category:'日用品',       memo:'シャンプー' },
-  { id:9,  type:'income',  amount:42000, date:'2026-05-20', category:'バイト代',     memo:'5月後半' },
-  { id:10, type:'expense', amount:6200,  date:'2026-05-22', category:'食費',         memo:'コンビニ+スーパー' },
-  { id:11, type:'expense', amount:12000, date:'2026-05-25', category:'娯楽',         memo:'ゲーム購入' },
-]
 
 const fmt     = n => '¥' + Math.abs(n).toLocaleString('ja-JP')
 const fmtDate = s => { const d = new Date(s); return `${d.getMonth()+1}/${d.getDate()}` }
@@ -37,7 +26,7 @@ function CalendarPicker({ value, onChange, onClose }) {
   const today = new Date()
   const year  = view.getFullYear()
   const month = view.getMonth()
-  const offset     = new Date(year, month, 1).getDay()
+  const offset      = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells = [...Array(offset).fill(null), ...Array.from({length: daysInMonth}, (_, i) => i + 1)]
 
@@ -54,7 +43,6 @@ function CalendarPicker({ value, onChange, onClose }) {
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
       <div onClick={e => e.stopPropagation()}
         style={{ background:C.card, borderRadius:'20px 20px 0 0', padding:'20px 16px 40px', width:'100%', maxWidth:430 }}>
-        {/* ヘッダー */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
           <button onClick={() => setView(new Date(year, month-1, 1))}
             style={{ background:'none', border:'none', cursor:'pointer', color:C.muted, padding:8 }}>
@@ -68,7 +56,6 @@ function CalendarPicker({ value, onChange, onClose }) {
             <ChevronRight size={20} />
           </button>
         </div>
-        {/* 曜日ヘッダー */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:4 }}>
           {['日','月','火','水','木','金','土'].map((d, i) => (
             <div key={d} style={{ textAlign:'center', fontSize:'0.72rem', fontWeight:600,
@@ -77,7 +64,6 @@ function CalendarPicker({ value, onChange, onClose }) {
             </div>
           ))}
         </div>
-        {/* 日付グリッド */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'4px 0' }}>
           {cells.map((d, i) => (
             <button key={i} onClick={() => pick(d)} disabled={!d}
@@ -91,7 +77,6 @@ function CalendarPicker({ value, onChange, onClose }) {
             </button>
           ))}
         </div>
-        {/* キャンセル */}
         <button onClick={onClose}
           style={{ width:'100%', marginTop:16, padding:'12px', background:'#F0EBE4', border:'none',
             borderRadius:10, color:C.muted, fontWeight:600, cursor:'pointer', fontSize:'0.95rem' }}>
@@ -124,18 +109,53 @@ function TxnRow({ t, onDelete }) {
   )
 }
 
+function LoginScreen({ onLogin }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, padding:32, paddingTop:'calc(32px + env(safe-area-inset-top))' }}>
+      <div style={{ fontFamily:'Georgia, serif', fontSize:'1.8rem', fontWeight:700, color:C.text, marginBottom:8 }}>収支管理</div>
+      <div style={{ fontSize:'0.88rem', color:C.muted, marginBottom:48, textAlign:'center', lineHeight:1.7 }}>
+        Googleアカウントでログインすると<br />複数の端末でデータを同期できます
+      </div>
+      <button onClick={onLogin}
+        style={{ padding:'14px 36px', background:C.income, color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontWeight:700, fontSize:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
+        Googleでログイン
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
   const today = new Date()
-  const [txns, setTxns]     = useState(SAMPLE)
-  const [budget, setBudget] = useState(80000)
-  const [cur, setCur]       = useState(new Date(today.getFullYear(), today.getMonth(), 1))
-  const [tab, setTab]       = useState('dash')
+  const [user, setUser]               = useState(undefined)
+  const [txns, setTxns]               = useState([])
+  const [budget, setBudget]           = useState(80000)
+  const [cur, setCur]                 = useState(new Date(today.getFullYear(), today.getMonth(), 1))
+  const [tab, setTab]                 = useState('dash')
   const [editBudget, setEditBudget]   = useState(false)
   const [budgetDraft, setBudgetDraft] = useState('')
-  const [showCal, setShowCal] = useState(false)
-  const [form, setForm] = useState({
+  const [showCal, setShowCal]         = useState(false)
+  const [form, setForm]               = useState({
     type:'expense', amount:'', date:today.toISOString().split('T')[0], category:'食費', memo:'',
   })
+
+  useEffect(() => onAuthStateChanged(auth, u => setUser(u ?? null)), [])
+
+  useEffect(() => {
+    if (!user) { setTxns([]); return }
+    return onSnapshot(collection(db, 'users', user.uid, 'transactions'), snap => {
+      setTxns(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    return onSnapshot(doc(db, 'users', user.uid, 'settings', 'budget'), snap => {
+      if (snap.exists()) setBudget(snap.data().amount)
+    })
+  }, [user])
+
+  const login  = () => signInWithPopup(auth, googleProvider)
+  const logout = () => fbSignOut(auth)
 
   const monthTxns = useMemo(() =>
     txns
@@ -165,18 +185,37 @@ export default function App() {
     return next
   })
 
-  const addTxn = () => {
+  const addTxn = async () => {
     const amt = parseInt(form.amount)
-    if (!amt || !form.date || !form.category) return
-    setTxns(p => [...p, { id:Date.now(), type:form.type, amount:amt, date:form.date, category:form.category, memo:form.memo }])
+    if (!amt || !form.date || !form.category || !user) return
+    await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+      type: form.type, amount: amt, date: form.date, category: form.category, memo: form.memo,
+    })
     setForm(f => ({ ...f, amount:'', memo:'' }))
     setTab('dash')
+  }
+
+  const deleteTxn = async (id) => {
+    if (!user) return
+    await deleteDoc(doc(db, 'users', user.uid, 'transactions', id))
+  }
+
+  const saveBudget = async () => {
+    const v = parseInt(budgetDraft)
+    if (!isNaN(v) && v >= 0) {
+      setBudget(v)
+      if (user) await setDoc(doc(db, 'users', user.uid, 'settings', 'budget'), { amount: v })
+    }
+    setEditBudget(false)
   }
 
   const card   = { background:C.card, borderRadius:12, padding:'16px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }
   const secttl = { fontFamily:'Georgia, serif', fontSize:'0.78rem', color:C.muted, marginBottom:10, textTransform:'uppercase', letterSpacing:'0.07em' }
   const inp    = { width:'100%', padding:'10px 12px', border:`1.5px solid ${C.border}`, borderRadius:8, background:C.bg, color:C.text, outline:'none' }
   const navBtn = { background:'none', border:`1px solid ${C.border}`, borderRadius:8, width:36, height:36, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:C.muted }
+
+  if (user === undefined) return null
+  if (!user) return <LoginScreen onLogin={login} />
 
   return (
     <div style={{ background:C.bg, minHeight:'100vh', maxWidth:430, margin:'0 auto', paddingBottom:80 }}>
@@ -186,7 +225,10 @@ export default function App() {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
           <button style={navBtn} onClick={() => setCur(d => new Date(d.getFullYear(), d.getMonth()-1, 1))}><ChevronLeft size={16}/></button>
           <span style={{ fontFamily:'Georgia, serif', fontSize:'1.1rem', fontWeight:700, color:C.text }}>{cur.getFullYear()}年{cur.getMonth()+1}月</span>
-          <button style={navBtn} onClick={() => setCur(d => new Date(d.getFullYear(), d.getMonth()+1, 1))}><ChevronRight size={16}/></button>
+          <div style={{ display:'flex', gap:6 }}>
+            <button style={navBtn} onClick={() => setCur(d => new Date(d.getFullYear(), d.getMonth()+1, 1))}><ChevronRight size={16}/></button>
+            <button style={navBtn} onClick={logout} title="ログアウト"><LogOut size={15}/></button>
+          </div>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:6, paddingBottom:10, alignItems:'center' }}>
           <div style={{ background:C.incomeBg, borderRadius:10, padding:'10px 8px', borderTop:`3px solid ${C.income}` }}>
@@ -208,7 +250,6 @@ export default function App() {
       {/* DASHBOARD */}
       {tab==='dash' && (
         <div style={{ padding:'16px 16px 0' }}>
-          {/* 予算タンク */}
           <div style={{ marginBottom:20 }}>
             <div style={secttl}>予算タンク</div>
             <div style={card}>
@@ -230,7 +271,7 @@ export default function App() {
                       <input type="number" inputMode="numeric" value={budgetDraft}
                         onChange={e => setBudgetDraft(e.target.value)}
                         style={{ ...inp, width:120, padding:'6px 10px', fontSize:14 }} placeholder="金額" />
-                      <button onClick={() => { const v=parseInt(budgetDraft); if(!isNaN(v) && v>=0) setBudget(v); setEditBudget(false) }}
+                      <button onClick={saveBudget}
                         style={{ padding:'6px 14px', background:C.income, color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:600 }}>OK</button>
                     </div>
                   ) : (
@@ -244,7 +285,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* カテゴリ別支出 */}
           {catExp.length > 0 && (
             <div style={{ marginBottom:20 }}>
               <div style={secttl}>カテゴリ別支出</div>
@@ -262,13 +302,12 @@ export default function App() {
             </div>
           )}
 
-          {/* 直近の記録 */}
           <div style={{ marginBottom:20 }}>
             <div style={secttl}>直近の記録</div>
             {monthTxns.length===0
               ? <div style={{ textAlign:'center', padding:'32px 0', color:C.muted }}>記録がありません</div>
               : <div style={card}>
-                  {monthTxns.slice(0,5).map(t => <TxnRow key={t.id} t={t} onDelete={id => setTxns(p=>p.filter(t=>t.id!==id))} />)}
+                  {monthTxns.slice(0,5).map(t => <TxnRow key={t.id} t={t} onDelete={deleteTxn} />)}
                   {monthTxns.length > 5 && (
                     <button onClick={() => setTab('list')}
                       style={{ display:'block', width:'100%', textAlign:'center', marginTop:10, background:'none', border:'none', cursor:'pointer', fontSize:'0.8rem', color:C.muted, textDecoration:'underline' }}>
@@ -335,12 +374,11 @@ export default function App() {
         <div style={{ padding:'16px' }}>
           {monthTxns.length===0
             ? <div style={{ textAlign:'center', padding:'40px 0', color:C.muted }}>記録がありません</div>
-            : <div style={card}>{monthTxns.map(t => <TxnRow key={t.id} t={t} onDelete={id => setTxns(p=>p.filter(t=>t.id!==id))} />)}</div>
+            : <div style={card}>{monthTxns.map(t => <TxnRow key={t.id} t={t} onDelete={deleteTxn} />)}</div>
           }
         </div>
       )}
 
-      {/* CALENDAR MODAL */}
       {showCal && <CalendarPicker value={form.date} onChange={d => setField('date', d)} onClose={() => setShowCal(false)} />}
 
       {/* BOTTOM NAV */}
