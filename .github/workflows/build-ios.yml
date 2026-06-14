@@ -1,0 +1,67 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build React app
+        run: npm run build
+
+      - name: Add iOS platform
+        run: npx cap add ios
+
+      - name: Sync web assets
+        run: npx cap sync ios
+
+      - name: Show ios directory structure
+        run: find ios -maxdepth 4 | sort
+
+      - name: Install CocoaPods dependencies (if needed)
+        run: |
+          PODFILE=$(find ios -name "Podfile" | head -1)
+          if [ -n "$PODFILE" ]; then
+            echo "Podfile found: $PODFILE"
+            cd "$(dirname $PODFILE)"
+            pod install
+          else
+            echo "No Podfile, using Swift Package Manager"
+          fi
+
+      - name: Build unsigned IPA
+        run: |
+          XCWORKSPACE=$(find ios -name "*.xcworkspace" ! -path "*/xcuserdata/*" | head -1)
+          echo "xcworkspace: $XCWORKSPACE"
+          cd "$(dirname $XCWORKSPACE)"
+          xcodebuild archive \
+            -workspace "$(basename $XCWORKSPACE)" \
+            -scheme App \
+            -configuration Release \
+            -archivePath "$PWD/build/App.xcarchive" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            -allowProvisioningUpdates 2>&1 | tail -50
+          mkdir -p Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app Payload/
+          zip -r App.ipa Payload/
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-ipa
+          path: ios/**/App.ipa

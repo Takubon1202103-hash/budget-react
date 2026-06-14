@@ -1,0 +1,5 @@
+{
+  "appId": "com.budget.app",
+  "appName": "収支管理",
+  "webDir": "dist"
+}
