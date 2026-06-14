@@ -122,7 +122,10 @@ function LoginScreen({ onLogin }) {
     if (!email || !pass) { setErr('メールとパスワードを入力してください'); return }
     setLoading(true); setErr('')
     try {
-      await onLogin(mode, email, pass)
+      const timeout = new Promise((_, rej) =>
+        setTimeout(() => rej({ code: 'timeout', message: 'タイムアウト。ネットワーク接続を確認してください' }), 10000)
+      )
+      await Promise.race([onLogin(mode, email, pass), timeout])
     } catch(e) {
       const msg = {
         'auth/invalid-email':           'メールアドレスが正しくありません',
@@ -131,8 +134,9 @@ function LoginScreen({ onLogin }) {
         'auth/email-already-in-use':    'このメールはすでに登録済みです',
         'auth/weak-password':           'パスワードは6文字以上にしてください',
         'auth/invalid-credential':      'メールかパスワードが違います',
+        'timeout':                      'タイムアウト。ネットワーク接続を確認してください',
       }
-      setErr(msg[e.code] || e.message)
+      setErr(msg[e.code] || ('code:' + e.code + ' ' + e.message))
     }
     setLoading(false)
   }
