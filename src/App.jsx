@@ -138,7 +138,11 @@ export default function App() {
     type:'expense', amount:'', date:today.toISOString().split('T')[0], category:'食費', memo:'',
   })
 
-  useEffect(() => onAuthStateChanged(auth, u => setUser(u ?? null)), [])
+  useEffect(() => {
+    const timer = setTimeout(() => setUser(prev => prev === undefined ? null : prev), 4000)
+    const unsub = onAuthStateChanged(auth, u => { clearTimeout(timer); setUser(u ?? null) })
+    return () => { unsub(); clearTimeout(timer) }
+  }, [])
 
   useEffect(() => {
     if (!user) { setTxns([]); return }
@@ -218,7 +222,8 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={login} />
 
   return (
-    <div style={{ background:C.bg, minHeight:'100vh', maxWidth:430, margin:'0 auto', paddingBottom:80 }}>
+    <div style={{ position:'fixed', inset:0, background:C.bg, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
+    <div style={{ maxWidth:430, margin:'0 auto', paddingBottom:80 }}>
 
       {/* HEADER */}
       <div style={{ background:C.bg, padding:'16px 16px 0', paddingTop:'calc(16px + env(safe-area-inset-top))', position:'sticky', top:0, zIndex:10, borderBottom:`1px solid ${C.border}` }}>
@@ -382,6 +387,7 @@ export default function App() {
       {showCal && <CalendarPicker value={form.date} onChange={d => setField('date', d)} onClose={() => setShowCal(false)} />}
 
       {/* BOTTOM NAV */}
+
       <nav style={{ position:'fixed', bottom:0, left:'50%', transform:'translateX(-50%)', width:'100%', maxWidth:430, background:'#fff', borderTop:`1px solid ${C.border}`, display:'flex', zIndex:20, paddingBottom:'env(safe-area-inset-bottom)' }}>
         {[
           { id:'dash', label:'ホーム', Icon:LayoutDashboard },
@@ -395,6 +401,7 @@ export default function App() {
           </button>
         ))}
       </nav>
+    </div>
     </div>
   )
 }
