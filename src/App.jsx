@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List, Calendar, LogOut } from 'lucide-react'
 import { auth, db, googleProvider } from './firebase'
-import { signInWithPopup, getRedirectResult, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
 import { collection, doc, onSnapshot, addDoc, deleteDoc, setDoc } from 'firebase/firestore'
 
 const C = {
@@ -110,22 +110,71 @@ function TxnRow({ t, onDelete }) {
 }
 
 function LoginScreen({ onLogin }) {
-  const [err, setErr] = useState('')
-  const handleLogin = () => {
-    setErr('ログイン中...')
-    onLogin().catch(e => setErr('エラー: ' + e.code + ' / ' + e.message))
+  const [mode, setMode]   = useState('login')
+  const [email, setEmail] = useState('')
+  const [pass, setPass]   = useState('')
+  const [err, setErr]     = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const inp = { width:'100%', padding:'12px', border:`1.5px solid ${C.border}`, borderRadius:8, background:'#fff', color:C.text, outline:'none', fontSize:16, boxSizing:'border-box' }
+
+  const submit = async () => {
+    if (!email || !pass) { setErr('メールとパスワードを入力してください'); return }
+    setLoading(true); setErr('')
+    try {
+      await onLogin(mode, email, pass)
+    } catch(e) {
+      const msg = {
+        'auth/invalid-email':           'メールアドレスが正しくありません',
+        'auth/user-not-found':          'アカウントが見つかりません',
+        'auth/wrong-password':          'パスワードが違います',
+        'auth/email-already-in-use':    'このメールはすでに登録済みです',
+        'auth/weak-password':           'パスワードは6文字以上にしてください',
+        'auth/invalid-credential':      'メールかパスワードが違います',
+      }
+      setErr(msg[e.code] || e.message)
+    }
+    setLoading(false)
   }
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, padding:32, paddingTop:'calc(32px + env(safe-area-inset-top))' }}>
-      <div style={{ fontFamily:'Georgia, serif', fontSize:'1.8rem', fontWeight:700, color:C.text, marginBottom:8 }}>収支管理</div>
-      <div style={{ fontSize:'0.88rem', color:C.muted, marginBottom:48, textAlign:'center', lineHeight:1.7 }}>
-        Googleアカウントでログインすると<br />複数の端末でデータを同期できます
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, padding:24, paddingTop:'calc(24px + env(safe-area-inset-top))', boxSizing:'border-box' }}>
+      <div style={{ fontFamily:'Georgia, serif', fontSize:'1.8rem', fontWeight:700, color:C.text, marginBottom:4 }}>収支管理</div>
+      <div style={{ fontSize:'0.85rem', color:C.muted, marginBottom:32, textAlign:'center' }}>
+        同じメールで複数端末のデータを同期できます
       </div>
-      <button onClick={handleLogin}
-        style={{ padding:'14px 36px', background:C.income, color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontWeight:700, fontSize:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
-        Googleでログイン
-      </button>
-      {err ? <div style={{ marginTop:20, fontSize:'0.8rem', color:C.expense, textAlign:'center', wordBreak:'break-all' }}>{err}</div> : null}
+
+      <div style={{ width:'100%', maxWidth:340 }}>
+        <div style={{ display:'flex', background:'#EDE8E2', borderRadius:10, padding:3, gap:3, marginBottom:20 }}>
+          {['login','register'].map(m => (
+            <button key={m} onClick={() => { setMode(m); setErr('') }}
+              style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none', cursor:'pointer', fontWeight:600,
+                background: mode===m ? C.income : 'transparent',
+                color: mode===m ? '#fff' : C.muted }}>
+              {m==='login' ? 'ログイン' : '新規登録'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:'block', fontSize:'0.8rem', color:C.muted, marginBottom:6, fontWeight:600 }}>メールアドレス</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="example@email.com" style={inp} />
+        </div>
+        <div style={{ marginBottom:20 }}>
+          <label style={{ display:'block', fontSize:'0.8rem', color:C.muted, marginBottom:6, fontWeight:600 }}>パスワード（6文字以上）</label>
+          <input type="password" value={pass} onChange={e => setPass(e.target.value)}
+            placeholder="••••••••" style={inp} />
+        </div>
+
+        {err ? <div style={{ marginBottom:12, fontSize:'0.82rem', color:C.expense, textAlign:'center' }}>{err}</div> : null}
+
+        <button onClick={submit} disabled={loading}
+          style={{ width:'100%', padding:'14px', background: loading ? C.muted : C.income,
+            color:'#fff', border:'none', borderRadius:10, fontWeight:700, fontSize:'1rem', cursor:'pointer' }}>
+          {loading ? '処理中...' : mode==='login' ? 'ログイン' : '登録してログイン'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -147,7 +196,6 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => setUser(prev => prev === undefined ? null : prev), 4000)
     const unsub = onAuthStateChanged(auth, u => { clearTimeout(timer); setUser(u ?? null) })
-    getRedirectResult(auth).catch(() => {})
     return () => { unsub(); clearTimeout(timer) }
   }, [])
 
@@ -165,7 +213,9 @@ export default function App() {
     })
   }, [user])
 
-  const login  = () => signInWithPopup(auth, googleProvider)
+  const login  = (mode, email, pass) => mode === 'register'
+    ? createUserWithEmailAndPassword(auth, email, pass)
+    : signInWithEmailAndPassword(auth, email, pass)
   const logout = () => fbSignOut(auth)
 
   const monthTxns = useMemo(() =>
