@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Trash2, LayoutDashboard, PlusCircle, List, Calendar, LogOut } from 'lucide-react'
 import { auth, db, googleProvider } from './firebase'
-import { signInWithRedirect, getRedirectResult, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
+import { signInWithPopup, getRedirectResult, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
 import { collection, doc, onSnapshot, addDoc, deleteDoc, setDoc } from 'firebase/firestore'
 
 const C = {
@@ -110,16 +110,22 @@ function TxnRow({ t, onDelete }) {
 }
 
 function LoginScreen({ onLogin }) {
+  const [err, setErr] = useState('')
+  const handleLogin = () => {
+    setErr('ログイン中...')
+    onLogin().catch(e => setErr('エラー: ' + e.code + ' / ' + e.message))
+  }
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, padding:32, paddingTop:'calc(32px + env(safe-area-inset-top))' }}>
       <div style={{ fontFamily:'Georgia, serif', fontSize:'1.8rem', fontWeight:700, color:C.text, marginBottom:8 }}>収支管理</div>
       <div style={{ fontSize:'0.88rem', color:C.muted, marginBottom:48, textAlign:'center', lineHeight:1.7 }}>
         Googleアカウントでログインすると<br />複数の端末でデータを同期できます
       </div>
-      <button onClick={onLogin}
+      <button onClick={handleLogin}
         style={{ padding:'14px 36px', background:C.income, color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontWeight:700, fontSize:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
         Googleでログイン
       </button>
+      {err ? <div style={{ marginTop:20, fontSize:'0.8rem', color:C.expense, textAlign:'center', wordBreak:'break-all' }}>{err}</div> : null}
     </div>
   )
 }
@@ -159,7 +165,7 @@ export default function App() {
     })
   }, [user])
 
-  const login  = () => signInWithRedirect(auth, googleProvider)
+  const login  = () => signInWithPopup(auth, googleProvider)
   const logout = () => fbSignOut(auth)
 
   const monthTxns = useMemo(() =>
